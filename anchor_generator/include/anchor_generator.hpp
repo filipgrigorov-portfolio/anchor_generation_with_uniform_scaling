@@ -4,10 +4,10 @@
 
 namespace anchors {
     struct AnchorsConfig {
-        size_t numberOfLayers=6;
+        size_t numberLayers;
 
         float minScale = 0.2f;
-        float maxScale = 0.9f;
+        float maxScale = 0.95f;
         
         std::vector<float> ratios;
 

@@ -1,11 +1,14 @@
 #include "anchor_generator.hpp"
 
 #include <cassert>
+#include <cmath>
+#include <iostream>
+#include <stdexcept>
 
 namespace anchors {
     AnchorGenerator::AnchorGenerator(const AnchorsConfig& config)
-    : numberLayers_(config.numberLayers_), featureMapsSizes_(config.featureMapsSizes) {
-        scales_ = computeScales(config.minScale, config.maxScale, config.featureMapsSizes);
+    : numberLayers_(config.numberLayers), featureMapsSizes_(config.featureMapsSizes) {
+        scales_ = GenerateScales(config.minScale, config.maxScale, config.featureMapsSizes);
 
         ratios_ = config.ratios;
         if (scales_.size() != ratios_.size()) {
@@ -14,37 +17,33 @@ namespace anchors {
 
         const float minDim = std::min(config.imgSize.second, config.imgSize.first);
         anchorScales_ = {
-            (minDim / config.imgSize.height),
-            (minDim / config.imgSize.width)
+            (minDim / config.imgSize.first),
+            (minDim / config.imgSize.second)
         };
     }
 
-    std::vector<std::vector<float>> GenerateAnchors() {
+    std::vector<std::vector<float>> AnchorGenerator::GenerateAnchors() {
         std::vector<std::vector<float>> priors;
-
-        assert(scales_.size() == ratios_.size());
-
         for (size_t idx = 0; idx < numberLayers_; ++idx) {
             const auto squareScale = std::sqrt(scales_[idx] * scales_[idx + 1]);
             std::vector<float> layerScales(scales_.size(), scales_[idx]);
             layerScales[numberLayers_ - 1] = squareScale;
-            anchors = tileAnchors(
+            assert(layerScales.size() == ratios_.size());
+            const auto anchorsPerLayer = GeneratePerLayerAnchors(
                 featureMapsSizes_[idx].first,
                 featureMapsSizes_[idx].second,
                 layerScales,
-                config.aspectRatios,
-                config.baseAnchorSize,
                 1.f / featureMapsSizes_[idx].second,
                 1.f / featureMapsSizes_[idx].first
             );
-            priors.push_back(anchors);
+            priors.push_back(anchorsPerLayer);
         }
         return priors;
     }
 
     // private
     std::vector<float> AnchorGenerator::GenerateScales(
-            const float minScale, 
+            const float minScale,   
             const float maxScale, 
             const std::vector<std::pair<float, float>>& featureMapsSizes) {
         if (featureMapsSizes.empty()) {
@@ -65,14 +64,14 @@ namespace anchors {
             const std::vector<float>& perLayerScales,
             const float stepX,
             const float stepY) {
-        assert(layerScales.size() == ratios_.size());
+        assert(perLayerScales.size() == ratios_.size());
 
         const auto numberOfRatios = ratios_.size();
         std::vector<float> anchorHalfWidths(numberOfRatios, 0.f);
         std::vector<float> anchorHalfHeights(numberOfRatios, 0.f);
         for (size_t idx = 0; idx < numberOfRatios; ++idx) {
-            anchorHalfWidths[idx] = 0.5f * layerScales[idx] * anchorScales_.second * std::sqrt(ratios_[idx]);
-            anchorHalfHeights[idx] = 0.5f * layerScales[idx] * anchorScales_.first / std::sqrt(ratios_[idx]);
+            anchorHalfWidths[idx] = 0.5f * perLayerScales[idx] * anchorScales_.second * std::sqrt(ratios_[idx]);
+            anchorHalfHeights[idx] = 0.5f * perLayerScales[idx] * anchorScales_.first / std::sqrt(ratios_[idx]);
         }
 
         const auto gridStride = gridHeight * gridWidth;
